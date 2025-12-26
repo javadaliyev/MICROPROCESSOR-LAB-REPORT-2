@@ -1,0 +1,30 @@
+#include <Wire.h>
+
+#define SLAVE_ADDR 0x10 // Slave I2C address
+
+volatile uint8_t last_received = 0; // Stores the last byte received from the master
+
+// Automatically triggered when the master sends data
+void receiveEvent(int howMany)
+{
+    if (howMany >= 1) // Only care about the first byte
+        last_received = Wire.read(); // Store the received byte
+}
+
+// Automatically triggered when the master requests data
+void requestEvent()
+{
+    Wire.write(last_received); // Send back the last received byte
+}
+
+void setup()
+{
+    Wire.begin(SLAVE_ADDR); // Initialize as I2C slave
+    Wire.onReceive(receiveEvent); // Set up receive handler
+    Wire.onRequest(requestEvent); // Set up request handler
+}
+
+void loop()
+{
+    // Empty loop
+}
