@@ -1,0 +1,45 @@
+#include <avr/io.h>
+#include <util/delay.h>
+
+void uart_init(void) {
+    uint16_t ubrr = 103; // Baud rate calculation for 9600 at 16 MHz (from datasheet)
+    UBRR0H = (uint8_t)(ubrr >> 8); // Set high byte of baud rate register
+    UBRR0L = (uint8_t)ubrr; // Set low byte of baud rate register
+
+    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00); // Set frame format: 8 data bits
+    UCSR0B = (1 << TXEN0) | (1 << RXEN0); // Enable transmitter and receiver
+}
+
+uint8_t uart_receive(void) {
+    while (!(UCSR0A & (1 << RXC0))); // Wait until data is received
+    return UDR0; // Return received byte
+}
+
+void uart_transmit(uint8_t data) {
+    while (!(UCSR0A & (1 << UDRE0))); // Wait until Data Register is empty (UDRE0 = 1)
+    UDR0 = data; // Write data to transmit buffer
+}
+
+int main(void) {
+    uart_init(); // Initialize UART
+    
+    uint8_t c;
+    uint8_t send_val;
+    
+    while (1) {
+        c = uart_receive(); // Wait for data to be received
+        
+        if (c == '1') { // If character '1' received
+            send_val = 1;
+            uart_transmit(send_val); // Send back value 1
+        }
+        else if (c == '2') { // If character '2' received
+            send_val = 2;
+            uart_transmit(send_val); // Send back value 2
+        }
+        else if (c == '3') { // If character '3' received
+            send_val = 3;
+            uart_transmit(send_val); // Send back value 3
+        }
+    }
+}
