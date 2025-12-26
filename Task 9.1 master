@@ -1,0 +1,108 @@
+#define F_CPU 16000000UL // 16 MHz clock
+#include <avr/io.h>                   
+#include <util/delay.h>    
+
+#define SLAVE_ADDR 0x10 // Slave address
+#define BUTTON_A   PD2 // Button pin
+#define LED_A      PD3  // LED pin
+
+
+void TWI_MasterInit(void)
+{
+    PRR &= ~(1 << PRTWI); // Enable TWI
+    TWSR &= ~((1 << TWPS1) | (1 << TWPS0));  // Set TWI prescaler
+    TWBR = 72; // Set bit rate
+    TWCR = (1 << TWEN); // Enable TWI
+}
+
+void TWI_Start(void)
+{
+    TWCR = (1 << TWINT) | (1 << TWSTA) | (1 << TWEN); // Start condition
+    while (!(TWCR & (1 << TWINT)));  // Wait for start
+}
+
+void TWI_Stop(void)
+{
+    TWCR = (1 << TWINT) | (1 << TWSTO) | (1 << TWEN); // Stop condition
+}
+
+void TWI_Write(uint8_t data)
+{
+    TWDR = data;                      // Load data
+    TWCR = (1 << TWINT) | (1 << TWEN); // Start transmission
+    while (!(TWCR & (1 << TWINT)));   // Wait for completion
+}
+
+uint8_t TWI_Read_ACK(void)
+{
+    TWCR = (1 << TWINT) | (1 << TWEA) | (1 << TWEN); // Read with ACK
+    while (!(TWCR & (1 << TWINT)));  // Wait for data
+    return TWDR;                     // Return data
+}
+
+uint8_t TWI_Read_NACK(void)
+{
+    TWCR = (1 << TWINT) | (1 << TWEN); // Read with NACK
+    while (!(TWCR & (1 << TWINT)));    // Wait for data
+    return TWDR;                       // Return data
+}
+
+void io_init(void)
+{
+    DDRD &= ~(1 << BUTTON_A); // Set BUTTON_A as input
+    PORTD |= (1 << BUTTON_A); // Enable pull-up on BUTTON_A
+    DDRD |= (1 << LED_A);  // Set LED_A as output
+}
+
+int main(void)
+{
+    io_init(); // Initialize pins
+    TWI_MasterInit(); // Initialize TWI
+
+    PORTC |= (1 << PC4) | (1 << PC5); // Enable pull-ups on SDA/SCL
+
+    uint8_t button_state = 0; // Button state
+    uint8_t slave_reply = 0; // Data from slave
+
+    static uint8_t prev_button_state = 0; // Previous button state
+    uint8_t toggle_event = 0; // Press event flag
+
+    while (1)
+    {
+        button_state = !(PIND & (1 << BUTTON_A)); // Read button
+
+        toggle_event = 0; // Default: no press
+        if (button_state == 1 && prev_button_state == 0) // Detect press
+        {
+            toggle_event = 1; // Set press event
+        }
+        prev_button_state = button_state; // Store button state
+
+        // Send to slave
+        TWI_Start();
+        TWI_Write((SLAVE_ADDR << 1) | 0); // Send slave address (write)
+        TWI_Write(toggle_event ? 0x01 : 0x00); // Send button state
+        TWI_Stop();
+
+        _delay_ms(5);  // Short delay before reading
+
+        // Read from slave
+        TWI_Start();
+        TWI_Write((SLAVE_ADDR << 1) | 1); // Send slave address (read)
+        slave_reply = TWI_Read_NACK();  // Read byte
+        TWI_Stop();
+
+        static uint8_t led_a_state = 0; // LED_A state
+
+        if (slave_reply == 0x01) // If slave reports press
+        {
+            led_a_state ^= 1; // Toggle LED state
+            if (led_a_state)
+                PORTD |= (1 << LED_A);  // Turn LED_A on
+            else
+                PORTD &= ~(1 << LED_A); // Turn LED_A off
+        }
+
+        _delay_ms(100); // Delay
+    }
+}
