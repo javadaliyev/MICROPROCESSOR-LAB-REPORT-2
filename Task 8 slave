@@ -1,0 +1,53 @@
+#include <avr/io.h>
+
+void uart_init(void)
+{
+    // From the datasheet: UBRR0 = FCPU / (16×BAUD) – 1, 16 MHz, 9600 baud = 103
+    uint16_t ubrr = 103; 
+    UBRR0H = (uint8_t)(ubrr >> 8); // Set high byte of UBRR
+    UBRR0L = (uint8_t)ubrr; // Set low byte of UBRR
+
+    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00); // 8 data bits
+    UCSR0B = (1 << TXEN0);  // Enable transmitter (TX)
+}
+
+void uart_send(char c)
+{
+    while (!(UCSR0A & (1 << UDRE0))); // Wait for Data Register to be empty
+    UDR0 = c;  // Load character into data register
+}
+
+// Convert number to ASCII and send
+void uart_send_number(uint8_t v)
+{
+    uart_send( (v/100) + '0' ); // Hundreds
+    uart_send( ((v/10)%10) + '0' ); // Tens
+    uart_send( (v%10) + '0' ); // Ones
+    uart_send('\n'); // New line
+}
+
+// SPI Slave Initialization
+void SPI_SlaveInit(void)
+{
+    DDRB |= (1 << PB4);  // MISO output
+    SPCR = (1 << SPE);   // Enable SPI in Slave mode
+}
+
+// Receive a byte from Master
+uint8_t SPI_SlaveReceive(void)
+{
+    while (!(SPSR & (1 << SPIF))); // Wait for transfer to complete
+    return SPDR; // Return received byte
+}
+
+int main(void)
+{
+    SPI_SlaveInit(); // Initialize SPI Slave
+    uart_init(); // Initialize UART for serial output
+
+    while (1)
+    {
+        uint8_t v = SPI_SlaveReceive(); // Receive byte from Master
+        uart_send_number(v);    // Print received value (e.g., 085, 170, 255)
+    }
+}
