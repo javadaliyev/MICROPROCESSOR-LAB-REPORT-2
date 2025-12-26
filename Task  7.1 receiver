@@ -1,0 +1,37 @@
+#include <avr/io.h>
+
+void uart_init(void) {
+    uint16_t ubrr = 103; // Baud rate calculation for 9600 at 16 MHz (from datasheet)
+    UBRR0H = (uint8_t)(ubrr >> 8); // Set high byte of baud rate register
+    UBRR0L = (uint8_t)ubrr; // Set low byte of baud rate register
+
+    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00); // 8 data bits frame format
+    UCSR0B = (1 << RXEN0); // Enable receiver
+}
+
+uint8_t uart_receive(void) {
+    while (!(UCSR0A & (1 << RXC0))); // Wait until data is received
+    return UDR0; // Return received byte
+}
+
+void leds_init(void) {
+    DDRB |= (1 << PB0) | (1 << PB1) | (1 << PB2); // Set PB0–PB2 as output
+}
+
+void leds_show(uint8_t val) {
+    PORTB &= ~((1 << PB0) | (1 << PB1) | (1 << PB2)); // Turn off all LEDs
+
+    if (val == 1) PORTB |= (1 << PB0); // Turn on LED1 if '1' received
+    else if (val == 2) PORTB |= (1 << PB1); // Turn on LED2 if '2' received
+    else if (val == 3) PORTB |= (1 << PB2); // Turn on LED3 if '3' received
+}
+
+int main(void) {
+    uart_init(); // Initialize UART
+    leds_init(); // Initialize LED pins
+
+    while (1) {
+        uint8_t data = uart_receive(); // Wait for data and receive byte
+        leds_show(data); // Display corresponding LED
+    }
+}
