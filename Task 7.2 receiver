@@ -1,0 +1,87 @@
+#include <avr/io.h>
+#include <util/delay.h>
+
+void uart_init(void) {
+    uint16_t ubrr = 103;  // 9600 baud for 16 MHz clock (from datasheet)
+    UBRR0H = (uint8_t)(ubrr >> 8);  // High byte of UBRR
+    UBRR0L = (uint8_t)ubrr;  // Low byte of UBRR
+
+    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);  // 8 data bits
+    UCSR0B = (1 << RXEN0);  // Enable receiver
+}
+
+uint8_t uart_receive(void) {
+    while (!(UCSR0A & (1 << RXC0)));  // Wait for data
+    return UDR0;  // Return received byte
+}
+
+void leds_init(void) {
+    DDRB |= (1 << PB0) | (1 << PB1) | (1 << PB2);  // Set PB0-PB2 as output
+}
+
+void leds_show(uint8_t v) {
+    PORTB &= ~((1 << PB0) | (1 << PB1) | (1 << PB2));  // Turn off all LEDs
+
+    if (v == 1) {
+        PORTB |= (1 << PB0);  // LED1 on
+    } else if (v == 2) {
+        PORTB |= (1 << PB1);  // LED2 on
+    } else if (v == 3) {
+        PORTB |= (1 << PB2);  // LED3 on
+    }
+}
+
+void eeprom_write(uint16_t addr, uint8_t data) {
+    while (EECR & (1 << EEPE));  // Wait for previous write to finish
+
+    EEAR = addr;  // Set EEPROM address
+    EEDR = data;  // Load data to EEPROM
+
+    EECR |= (1 << EEMPE);  // Enable write
+    EECR |= (1 << EEPE);   // Start write
+}
+
+uint8_t eeprom_read(uint16_t addr) {
+    while (EECR & (1 << EEPE));  // Wait for previous write
+
+    EEAR = addr;  // Set EEPROM address
+    EECR |= (1 << EERE);  // Start read
+    return EEDR;  // Return data
+}
+
+int main(void) {
+    uart_init();  // Initialize UART
+    leds_init();  // Initialize LEDs
+
+    uint16_t index = 0;  // EEPROM write address
+    uint8_t c;
+    uint8_t ready_for_new_sequence = 1;
+
+    while (1) {
+        c = uart_receive();  // Wait for input
+
+        if (c == 1 || c == 2 || c == 3) {  // Valid input
+            if (ready_for_new_sequence) {
+                index = 0;  // Reset EEPROM index
+                ready_for_new_sequence = 0;
+            }
+
+            eeprom_write(index, c);  // Write value to EEPROM
+            index++;  // Increment address
+        }
+        else if (c == 4) {  // Play back stored sequence
+            for (uint16_t i = 0; i < index; i++) {
+                uint8_t val = eeprom_read(i);  // Read from EEPROM
+                leds_show(val);  // Show corresponding LED
+                _delay_ms(500);  // Delay
+            }
+        }
+        else if (c == 0) {  // Reset for new sequence
+            index = 0;
+            ready_for_new_sequence = 1;
+        }
+        else {
+            // Ignore invalid commands
+        }
+    }
+}
