@@ -1,0 +1,101 @@
+#define F_CPU 16000000UL
+
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <stdint.h>
+
+#define NUM_PRIMES_TARGET 2000
+
+#define LIMIT       20000 // Set limit to cover at least the 2000th prime (~17389)
+
+#define ODD_COUNT   ((LIMIT - 1) / 2)
+
+#define BITSET_SIZE ((ODD_COUNT + 7) / 8)
+
+static uint8_t composite[BITSET_SIZE]; // Bitset for composite numbers
+
+// Mark idx as composite (bit = 1 means composite)
+static inline void set_composite(uint16_t idx)
+{
+    composite[idx >> 3] |= (1 << (idx & 7));
+}
+
+// Check if idx is composite
+static inline uint8_t is_composite(uint16_t idx)
+{
+    return (composite[idx >> 3] & (1 << (idx & 7))) != 0;
+}
+
+int main(void)
+{
+    DDRB |= (1 << DDB5) | (1 << DDB0); // Set PB5 (LED) and PB0 (oscilloscope trigger) as outputs
+    PORTB &= ~((1 << PB5) | (1 << PB0)); // Start with LED off and PB0 low
+
+    cli(); // Disable interrupts to ensure accurate timing
+
+    // Initialize bitset assuming all odds are prime
+    for (uint16_t i = 0; i < BITSET_SIZE; i++)
+    {
+        composite[i] = 0;
+    }
+
+    PORTB |= (1 << PB0); // Set PB0 high to mark the start of computation
+
+    uint16_t max_base = LIMIT;
+
+    // Approximate sqrt(LIMIT)
+    uint16_t r = 1;
+    while ((uint32_t)r * (uint32_t)r <= max_base) r++;
+    uint16_t sqrt_limit = r - 1;
+
+    // Iterate over odd candidates (3, 5, 7, ...)
+    for (uint16_t idx = 0;; idx++)
+    {
+        uint16_t p = (uint16_t)(2 * idx + 3); // Map idx to odd number p
+
+        if (p > sqrt_limit) // Stop when p exceeds sqrt(LIMIT)
+            break;
+
+        if (is_composite(idx)) // Skip if already marked as composite
+            continue;
+
+        uint32_t p2 = (uint32_t)p * (uint32_t)p;
+        if (p2 > LIMIT)
+            break;
+
+        uint16_t start_idx = (uint16_t)((p2 - 3) >> 1); // Map p^2 to array index
+
+        // Mark all odd multiples of p (p^2, p^2 + 2p, ...)
+        for (uint16_t j = start_idx; j < ODD_COUNT; j += p)
+        {
+            set_composite(j);
+        }
+    }
+
+    uint16_t count_primes = 0;
+
+    count_primes++; // Mark 2 as prime
+    PINB |= (1 << PB5); // Toggle LED for prime 2
+
+    uint16_t idx = 0;
+    while (count_primes < NUM_PRIMES_TARGET && idx < ODD_COUNT)
+    {
+        if (!is_composite(idx)) // If not composite, it's prime
+        {
+            count_primes++;
+            PINB |= (1 << PB5); // Toggle LED for each prime
+        }
+        idx++; // Move to the next odd number
+    }
+
+    PORTB &= ~(1 << PB0); // Set PB0 low to mark end of computation
+
+    PORTB |= (1 << PB5); // Leave LED on after reaching 2000 primes
+
+    // Infinite loop to stop program
+    for (;;)
+    {
+    }
+
+    return 0;
+}
