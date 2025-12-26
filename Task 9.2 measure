@@ -1,0 +1,39 @@
+#include <Wire.h>  // Include Arduino I2C library
+#define SLAVE_ADDR 0x10 // Slave I2C address
+
+// Configures I2C clock speed using prescaler and TWBR for 25 kHz, 100 kHz, or 400 kHz
+void setI2CSpeedPreset(uint8_t mode)
+{
+    if (mode == 0)
+    {
+        // 25 kHz: Prescaler = 4, TWBR = 78
+        TWSR = (TWSR & ~((1 << TWPS1) | (1 << TWPS0))) | (1 << TWPS0);
+        TWBR = 78;
+    }
+    else if (mode == 1)
+    {
+        // 100 kHz: Prescaler = 1, TWBR = 72
+        TWSR &= ~((1 << TWPS1) | (1 << TWPS0));
+        TWBR = 72;
+    }
+    else if (mode == 2)
+    {
+        // 400 kHz: Prescaler = 1, TWBR = 12
+        TWBR = 12;
+        TWSR &= ~((1 << TWPS1) | (1 << TWPS0));  
+    }
+}
+
+void setup()
+{
+    Wire.begin(); // Initialize I2C in master mode
+    setI2CSpeedPreset(1);  // Set to 100 kHz
+}
+
+void loop()
+{
+    // Start transmission to the slave (SLA+W)
+    Wire.beginTransmission(SLAVE_ADDR);
+    Wire.write(0x55); // Send byte to slave
+    Wire.endTransmission(); // Send STOP condition
+}
